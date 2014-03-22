@@ -30,10 +30,19 @@
 #include <roboptim/core/solver-error.hh>
 
 #include "roboptim/core/plugin/pagmo/pagmo.hh"
+#include "roboptim/core/plugin/pagmo/log.hh"
 
 #include <pagmo/src/pagmo.h>
 #include <pagmo/src/archipelago.h>
+
+#include <pagmo/src/algorithm/bee_colony.h>
+#include <pagmo/src/algorithm/cs.h>
+#include <pagmo/src/algorithm/cstrs_co_evolution.h>
+#include <pagmo/src/algorithm/cmaes.h>
 #include <pagmo/src/algorithm/de.h>
+#include <pagmo/src/algorithm/de_1220.h>
+#include <pagmo/src/algorithm/ihs.h>
+#include <pagmo/src/algorithm/mbh.h>
 
 // TODO: add Ipopt support if Ipopt has been found
 //#include <pagmo/src/algorithm/ipopt.h>
@@ -66,8 +75,9 @@ namespace roboptim
 
       // Load <algo string, algo> map
       algo_map_ = boost::assign::map_list_of
-#define N_ALGO 2
-#define ALGO_LIST (N_ALGO, (cmaes,de))
+#define N_ALGO 8
+#define ALGO_LIST (N_ALGO, (bee_colony,cmaes,cs,cstrs_co_evolution,de,de_1220, \
+                            ihs,mbh))
 #define GET_ALGO(n) BOOST_PP_ARRAY_ELEM(n,ALGO_LIST)
 #define BOOST_PP_LOCAL_MACRO(n)				\
 	(std::string (BOOST_PP_STRINGIZE(GET_ALGO(n))), \
@@ -104,7 +114,9 @@ namespace roboptim
       // PaGMO-specific parameters
       DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 20);
       DEFINE_PARAMETER ("pagmo.seed", "random seed", 123);
-      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "de");
+      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "de_1220");
+      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "mbh");
+      DEFINE_PARAMETER ("pagmo.output_file", "output file", "");
       // FIXME: use max-iterations instead?
       DEFINE_PARAMETER ("pagmo.generations", "number of generations", 3000);
     }
@@ -126,14 +138,19 @@ namespace roboptim
           return;
 	}
 
-      // 1 - Create population.
-      // Here, evolution will take place on the same thread as main.
       int seed = boost::get<int> (parameters ()["pagmo.seed"].value);
       int n_c = boost::get<int> (parameters ()["pagmo.candidates"].value);
+      int generations = boost::get<int> (parameters ()["pagmo.generations"].value);
+
+      // 1 - Create population.
+      // Here, evolution will take place on the same thread as main.
       ::pagmo::population pop (wrapper_, n_c, seed);
 
       // TODO: redirect verbose to log file
-      //algo.set_screen_output(true);
+      std::string output_file = boost::get<std::string>
+          (parameters ()["pagmo.output_file"].value);
+      bool use_log = (output_file.compare ("") != 0);
+      LogRedirector redirector;
 
       // 2 - We instantiate the algorithm with a given number of generations.
       // Note: this is where we can change the algorithm that will be used,
@@ -141,30 +158,103 @@ namespace roboptim
       std::string algo_str = boost::get<std::string>
 	(parameters ()["pagmo.algorithm"].value);
 
+#define SOLVE(ALGO,POP) \
+      if (use_log) { \
+          ALGO.set_screen_output (true); \
+          redirector.start (); \
+      } \
+      ALGO.evolve (POP); \
+      if (use_log) redirector.dump (output_file);
+
       // Choose appropriate algorithm
       switch (algo_map_[algo_str])
 	{
+	case bee_colony:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::bee_colony algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
 	case cmaes:
 	  {
 	    // Instantiate algorithm
-	    ::pagmo::algorithm::cmaes algo (3000);
+	    ::pagmo::algorithm::cmaes algo (generations);
 
 	    // Evolve population with the algorithm and solve the problem
-	    algo.evolve (pop);
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case cs:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::cs algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case cstrs_co_evolution:
+	  {
+	    // Instantiate algorithm
+        ::pagmo::algorithm::de_1220 original (generations);
+	    ::pagmo::algorithm::cstrs_co_evolution algo (original);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case de:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::de algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
 	  }
 	  break;
 
 	default:
-	case de:
+	case de_1220:
 	  {
 	    // Instantiate algorithm
-	    ::pagmo::algorithm::de algo (3000);
+	    ::pagmo::algorithm::de_1220 algo (generations);
 
 	    // Evolve population with the algorithm and solve the problem
-	    algo.evolve (pop);
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case ihs:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::ihs algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case mbh:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::de_1220 local (generations);
+	    ::pagmo::algorithm::mbh algo (local);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
 	  }
 	  break;
 	}
+
+    #undef SOLVE
+
       // Note: for parallel processing, evolutions can take place in parallel
       // on multiple separate islands containing, each several candidate
       // solutions to the problem.

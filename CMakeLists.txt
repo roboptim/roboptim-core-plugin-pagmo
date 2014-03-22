@@ -33,6 +33,7 @@ SETUP_PROJECT()
 # Declare headers
 SET(${PROJECT_NAME}_HEADERS
   include/roboptim/core/plugin/pagmo/pagmo.hh
+  include/roboptim/core/plugin/pagmo/log.hh
   include/roboptim/core/plugin/pagmo/problem_wrapper.hh
   include/roboptim/core/plugin/pagmo/problem_wrapper.hxx
   )

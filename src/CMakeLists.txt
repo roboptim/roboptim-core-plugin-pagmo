@@ -20,7 +20,7 @@
 ADD_DEFINITIONS(-DPLUGIN_PATH="${LIBRARY_OUTPUT_PATH}")
 
 MACRO(PAGMO_PLUGIN NAME)
-  ADD_LIBRARY(roboptim-core-plugin-${NAME} MODULE ${NAME}.cc ${HEADERS})
+  ADD_LIBRARY(roboptim-core-plugin-${NAME} MODULE ${NAME}.cc log.cc ${HEADERS})
   PKG_CONFIG_USE_DEPENDENCY(roboptim-core-plugin-${NAME} roboptim-core)
   PKG_CONFIG_USE_DEPENDENCY(roboptim-core-plugin-${NAME} pagmo)
   SET_TARGET_PROPERTIES(roboptim-core-plugin-${NAME} PROPERTIES
