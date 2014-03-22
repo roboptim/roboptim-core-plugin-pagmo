@@ -18,7 +18,11 @@
 #include <cstring>
 
 #include <boost/shared_ptr.hpp>
-#include <boost/make_shared.hpp>
+
+#include <boost/assign/list_of.hpp>
+#include <boost/preprocessor/array/elem.hpp>
+#include <boost/preprocessor/iteration/local.hpp>
+#include <boost/preprocessor/stringize.hpp>
 
 #include <roboptim/core/function.hh>
 #include <roboptim/core/linear-function.hh>
@@ -29,22 +33,54 @@
 
 #include <pagmo/src/pagmo.h>
 #include <pagmo/src/archipelago.h>
-#include <pagmo/src/algorithm/ipopt.h>
+#include <pagmo/src/algorithm/de.h>
+
+// TODO: add Ipopt support if Ipopt has been found
+//#include <pagmo/src/algorithm/ipopt.h>
 
 namespace roboptim
 {
   namespace pagmo
   {
+    namespace detail
+    {
+      template <typename T>
+      boost::shared_ptr< ::pagmo::algorithm::base> createInstance ()
+      {
+	return boost::shared_ptr< ::pagmo::algorithm::base> (new T);
+      }
+
+    } // namespace detail
+
     SolverNlp::SolverNlp (const problem_t& problem) :
       parent_t (problem),
       n_ (problem.function ().inputSize ()),
       m_ (problem.function ().outputSize ()),
       x_ (n_),
       solverState_ (problem),
-      wrapper_ (problem)
+      wrapper_ (problem),
+      algo_map_ ()
     {
       // Initialize x
       x_.setZero ();
+
+      // Load <algo string, algo> map
+      algo_map_ = boost::assign::map_list_of
+#define N_ALGO 2
+#define ALGO_LIST (N_ALGO, (cmaes,de))
+#define GET_ALGO(n) BOOST_PP_ARRAY_ELEM(n,ALGO_LIST)
+#define BOOST_PP_LOCAL_MACRO(n)				\
+	(std::string (BOOST_PP_STRINGIZE(GET_ALGO(n))), \
+	 GET_ALGO(n))
+#define BOOST_PP_LOCAL_LIMITS (0,N_ALGO-1)
+#include BOOST_PP_LOCAL_ITERATE()
+	;
+#undef ALGO_LIST
+#undef N_ALGO
+
+      // Initialize parameters
+      initializeParameters ();
+
     }
 
     SolverNlp::~SolverNlp () throw ()
@@ -64,6 +100,13 @@ namespace roboptim
 
       // Shared parameters
       DEFINE_PARAMETER ("max-iterations", "number of iterations", 10000);
+
+      // PaGMO-specific parameters
+      DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 20);
+      DEFINE_PARAMETER ("pagmo.seed", "random seed", 123);
+      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "de");
+      // FIXME: use max-iterations instead?
+      DEFINE_PARAMETER ("pagmo.generations", "number of generations", 3000);
     }
 
     void SolverNlp::solve () throw ()
@@ -75,40 +118,69 @@ namespace roboptim
 	{
 	  x_ = *(problem ().startingPoint ());
 	}
+      // TODO: find what can be done with given starting point
 
-      //We instantiate the algorithm differential evolution with 500 generations
-      ::pagmo::algorithm::ipopt algo (3000);
+      if (parameters ().find ("pagmo.algorithm") == parameters ().end ())
+	{
+          result_ = SolverError ("Undefined PaGMO algorithm.");
+          return;
+	}
 
-      //1 - Evolution takes place on the same thread as main
-      // We instantiate a population containing 20 candidate solutions to
-      // the wrapped problem
-      unsigned int seed = 123;
-      ::pagmo::population pop (wrapper_, 20, seed);
+      // 1 - Create population.
+      // Here, evolution will take place on the same thread as main.
+      int seed = boost::get<int> (parameters ()["pagmo.seed"].value);
+      int n_c = boost::get<int> (parameters ()["pagmo.candidates"].value);
+      ::pagmo::population pop (wrapper_, n_c, seed);
 
       // TODO: redirect verbose to log file
       //algo.set_screen_output(true);
-      algo.evolve (pop);
 
-      //3 - 8 Evolutions take place in parallel on 8 separte islands containing,
-      //each, 20 candidate solutions to the Schwefel problem
-      /*::pagmo::archipelago archi (algo, wrapper_, 8, 20);
-	archi.evolve ();
+      // 2 - We instantiate the algorithm with a given number of generations.
+      // Note: this is where we can change the algorithm that will be used,
+      // e.g Differential Evolution, Ipopt etc.
+      std::string algo_str = boost::get<std::string>
+	(parameters ()["pagmo.algorithm"].value);
 
-	std::vector<double> temp;
-	for (::pagmo::archipelago::size_type
-	i = 0; i < archi.get_size(); ++i)
+      // Choose appropriate algorithm
+      switch (algo_map_[algo_str])
 	{
-	temp.push_back(archi.get_island(i)->get_population().champion().f[0]);
-	}*/
+	case cmaes:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::cmaes algo (3000);
+
+	    // Evolve population with the algorithm and solve the problem
+	    algo.evolve (pop);
+	  }
+	  break;
+
+	default:
+	case de:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::de algo (3000);
+
+	    // Evolve population with the algorithm and solve the problem
+	    algo.evolve (pop);
+	  }
+	  break;
+	}
+      // Note: for parallel processing, evolutions can take place in parallel
+      // on multiple separate islands containing, each several candidate
+      // solutions to the problem.
+      //::pagmo::archipelago archi (algo, wrapper_, 8, 20);
+      //archi.evolve ();
 
       Map<const argument_t> map_x (pop.champion ().x.data (), n_);
       Map<const result_t> map_obj (pop.champion ().f.data (), m_);
       Map<const vector_t> map_cstr (pop.champion ().c.data (),
                                     pop.champion ().c.size ());
 
+      // Fill result structure
       Result result (n_, 1);
       result.x = map_x;
       result.value = map_obj;
+      result.constraints = map_cstr;
       result_ = result;
     }
   } // namespace pagmo

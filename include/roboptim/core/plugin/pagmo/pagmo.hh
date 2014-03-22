@@ -1,7 +1,6 @@
 // Copyright (c) 2014 CNRS
 // Authors: Benjamin Chretien
 
-
 // This file is part of roboptim-core-plugin-pagmo
 // roboptim-core-plugin-pagmo is free software: you can redistribute it
 // and/or modify it under the terms of the GNU Lesser General Public
@@ -20,9 +19,6 @@
 # define ROBOPTIM_CORE_PLUGIN_PAGMO_PAGMO_HH
 
 # include <map>
-# include <set>
-
-# include <boost/mpl/vector.hpp>
 
 # include <roboptim/core/solver.hh>
 # include <roboptim/core/solver-state.hh>
@@ -31,6 +27,15 @@
 
 namespace roboptim {
   namespace pagmo {
+
+    // Available PaGMO algorithms
+    enum Algorithm
+      {
+	cmaes, // Covariance Matrix Adaptation Evolutionary Strategy
+	de, // Differential Evolution
+	ipopt // Ipopt
+      };
+
     /// \brief Solver interfacing with the PaGMO library.
     class SolverNlp :
       public Solver<DifferentiableFunction,
@@ -137,6 +142,9 @@ namespace roboptim {
 
       /// \brief PaGMO problem wrapper.
       wrapper_t wrapper_;
+
+      /// \brief Map string to PaGMO algorithm
+      std::map<std::string, Algorithm> algo_map_;
     }; // class SolverNlp
   } // namespace pagmo
 } // namespace roboptim
