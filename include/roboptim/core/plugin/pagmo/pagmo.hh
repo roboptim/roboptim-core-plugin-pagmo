@@ -27,12 +27,11 @@
 # include <roboptim/core/solver.hh>
 # include <roboptim/core/solver-state.hh>
 
+# include "roboptim/core/plugin/pagmo/problem_wrapper.hh"
+
 namespace roboptim {
   namespace pagmo {
-    /// \brief Solver implementing a variant of Levenberg-Marquardt algorithm.
-    ///
-    /// This solver tries to minimize the euclidean norm of a vector valued
-    /// function.
+    /// \brief Solver interfacing with the PaGMO library.
     class SolverNlp :
       public Solver<DifferentiableFunction,
                     boost::mpl::vector<LinearFunction,
@@ -67,6 +66,9 @@ namespace roboptim {
 
       /// \brief RobOptim callback
       typedef parent_t::callback_t callback_t;
+
+      /// \brief PaGMO problem wrapper
+      typedef ProblemWrapper<parent_t> wrapper_t;
 
       /// \brief Constructor by problem
       explicit SolverNlp (const problem_t& problem);
@@ -111,6 +113,9 @@ namespace roboptim {
         return callback_;
       }
 
+    private:
+      void initializeParameters () throw ();
+
     public:
       static const int linearFunctionId = 0;
       static const int nonlinearFunctionId = 1;
@@ -129,7 +134,10 @@ namespace roboptim {
 
       /// \brief Intermediate callback (called at each end of iteration).
       callback_t callback_;
+
+      /// \brief PaGMO problem wrapper.
+      wrapper_t wrapper_;
     }; // class SolverNlp
   } // namespace pagmo
 } // namespace roboptim
-#endif // ROBOPTIM_CORE_PLUGIN_PAGMO_PAGMO_NLP_HH
+#endif // ROBOPTIM_CORE_PLUGIN_PAGMO_PAGMO_HH

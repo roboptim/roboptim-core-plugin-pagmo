@@ -1,7 +1,6 @@
 // Copyright (c) 2014 CNRS
 // Authors: Benjamin Chretien
 
-
 // This file is part of roboptim-core-plugin-pagmo
 // roboptim-core-plugin-pagmo is free software: you can redistribute it
 // and/or modify it under the terms of the GNU Lesser General Public
@@ -17,8 +16,6 @@
 // <http://www.gnu.org/licenses/>.
 
 #include <cstring>
-#include <map>
-#include <limits> // epsilon
 
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
@@ -30,6 +27,10 @@
 
 #include "roboptim/core/plugin/pagmo/pagmo.hh"
 
+#include <pagmo/src/pagmo.h>
+#include <pagmo/src/archipelago.h>
+#include <pagmo/src/algorithm/ipopt.h>
+
 namespace roboptim
 {
   namespace pagmo
@@ -40,8 +41,7 @@ namespace roboptim
       m_ (problem.function ().outputSize ()),
       x_ (n_),
       solverState_ (problem),
-      algo_map_ (),
-      global_algos_ ()
+      wrapper_ (problem)
     {
       // Initialize x
       x_.setZero ();
@@ -69,7 +69,6 @@ namespace roboptim
     void SolverNlp::solve () throw ()
     {
       using namespace Eigen;
-      typedef VectorXd::Index index_t;
 
       // Load optional starting point
       if (problem ().startingPoint ())
@@ -77,7 +76,40 @@ namespace roboptim
 	  x_ = *(problem ().startingPoint ());
 	}
 
-      result_ = SolverError ("Error");
+      //We instantiate the algorithm differential evolution with 500 generations
+      ::pagmo::algorithm::ipopt algo (3000);
+
+      //1 - Evolution takes place on the same thread as main
+      // We instantiate a population containing 20 candidate solutions to
+      // the wrapped problem
+      unsigned int seed = 123;
+      ::pagmo::population pop (wrapper_, 20, seed);
+
+      // TODO: redirect verbose to log file
+      //algo.set_screen_output(true);
+      algo.evolve (pop);
+
+      //3 - 8 Evolutions take place in parallel on 8 separte islands containing,
+      //each, 20 candidate solutions to the Schwefel problem
+      /*::pagmo::archipelago archi (algo, wrapper_, 8, 20);
+	archi.evolve ();
+
+	std::vector<double> temp;
+	for (::pagmo::archipelago::size_type
+	i = 0; i < archi.get_size(); ++i)
+	{
+	temp.push_back(archi.get_island(i)->get_population().champion().f[0]);
+	}*/
+
+      Map<const argument_t> map_x (pop.champion ().x.data (), n_);
+      Map<const result_t> map_obj (pop.champion ().f.data (), m_);
+      Map<const vector_t> map_cstr (pop.champion ().c.data (),
+                                    pop.champion ().c.size ());
+
+      Result result (n_, 1);
+      result.x = map_x;
+      result.value = map_obj;
+      result_ = result;
     }
   } // namespace pagmo
 } // end of namespace roboptim
