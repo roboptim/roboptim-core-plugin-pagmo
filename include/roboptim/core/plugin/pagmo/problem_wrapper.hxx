@@ -29,23 +29,60 @@ namespace roboptim
 {
   namespace pagmo
   {
+    namespace detail
+    {
+      template <typename P>
+      size_t constraint_size (const P& pb)
+      {
+	typedef typename P::constraints_t::const_iterator cstr_iter_t;
+	boost::shared_ptr<Function> cstr;
+
+	size_t size = 0;
+	for (cstr_iter_t it = pb.constraints ().begin ();
+	     it != pb.constraints ().end (); ++it)
+	  {
+
+	    cstr = boost::get<boost::shared_ptr<DifferentiableFunction> > (*it);
+	    // TODO: do not support both lower and upper bounds
+	    size += 2*cstr->outputSize ();
+	  }
+
+	return size;
+      }
+    } // namespace detail
+
+
     template<typename T>
-    ProblemWrapper<T>::ProblemWrapper (const problem_t& pb)
-      : base_t (static_cast<int> (pb.function ().inputSize ()),0,1,0,
-		// TODO: handle multidimensional constraints
-		static_cast<int> (pb.constraints ().size ())),
+    ProblemWrapper<T>::ProblemWrapper (const problem_t& pb,
+                                       double infinity_bounds)
+      : base_t (// n
+                static_cast<int> (pb.function ().inputSize ()),
+                // combinatorial part
+                0,
+                // m
+                static_cast<int> (pb.function ().outputSize ()),
+                // total number of constraints
+                static_cast<int> (detail::constraint_size (pb)),
+                // total number of inequality constraints
+                static_cast<int> (detail::constraint_size (pb))),
 	pb_ (pb)
     {
       std::vector<double> lb;
       std::vector<double> ub;
+
+      double infinity = function_t::infinity ();
 
       for (typename intervals_t::const_iterator
              iter  = pb.argumentBounds ().begin ();
 	   iter != pb.argumentBounds ().end ();
 	   ++iter)
         {
-	  lb.push_back (iter->first);
-	  ub.push_back (iter->second);
+	  if (iter->first == -infinity)
+	    lb.push_back (-infinity_bounds);
+	  else lb.push_back (iter->first);
+	  if (iter->second == infinity)
+	    ub.push_back (infinity_bounds);
+	  else ub.push_back (iter->second);
         }
 
       // Set bounds
@@ -105,14 +142,13 @@ namespace roboptim
 	   it != pb_.constraints ().end (); ++it)
         {
 	  boost::shared_ptr<Function> cstr;
-	  cstr = boost::get<boost::shared_ptr<Function> > (*it);
+	  cstr = boost::get<boost::shared_ptr<DifferentiableFunction> > (*it);
 
 	  typename function_t::result_t res = (*cstr)(map_x);
 
 	  // For each constraint dimension
 	  for (size_t i = 0; i < cstr->outputSize (); ++i)
             {
-	      // for each constraint
 	      const interval_t&
                 interval = pb_.boundsVector ()[cstrs_id][i];
 
@@ -124,14 +160,12 @@ namespace roboptim
 	      if (has_lb)
                 {
 		  // if one lower bound, i.e. lb <= g
-		  g[iter] = lb - res[iter];
-		  iter++;
+		  g[iter++] = lb - res[i];
                 }
 	      if (has_ub)
                 {
 		  // if one upper bound, i.e. g <= ub
-		  g[iter] = res[iter] - ub;
-		  iter++;
+		  g[iter++] = res[i] - ub;
                 }
             }
 	  cstrs_id++;

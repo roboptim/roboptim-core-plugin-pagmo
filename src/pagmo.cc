@@ -112,11 +112,12 @@ namespace roboptim
       DEFINE_PARAMETER ("max-iterations", "number of iterations", 10000);
 
       // PaGMO-specific parameters
-      DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 20);
+      DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 30);
       DEFINE_PARAMETER ("pagmo.seed", "random seed", 123);
-      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "de_1220");
       DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "mbh");
       DEFINE_PARAMETER ("pagmo.output_file", "output file", "");
+      DEFINE_PARAMETER ("pagmo.penalty_weight",
+                        "penalty weight for constrained problems", 1e5);
       // FIXME: use max-iterations instead?
       DEFINE_PARAMETER ("pagmo.generations", "number of generations", 3000);
     }
@@ -124,6 +125,7 @@ namespace roboptim
     void SolverNlp::solve () throw ()
     {
       using namespace Eigen;
+      using namespace boost;
 
       // Load optional starting point
       if (problem ().startingPoint ())
@@ -138,32 +140,54 @@ namespace roboptim
           return;
 	}
 
-      int seed = boost::get<int> (parameters ()["pagmo.seed"].value);
-      int n_c = boost::get<int> (parameters ()["pagmo.candidates"].value);
-      int generations = boost::get<int> (parameters ()["pagmo.generations"].value);
+      int seed = get<int> (parameters ()["pagmo.seed"].value);
+      int n_c = get<int> (parameters ()["pagmo.candidates"].value);
+      int generations = get<int> (parameters ()["pagmo.generations"].value);
+      double penalty_weight = get<double> (parameters ()["pagmo.penalty_weight"].value);
+
+      bool is_constrained = (wrapper_.get_c_dimension () > 0);
 
       // 1 - Create population.
       // Here, evolution will take place on the same thread as main.
-      ::pagmo::population pop (wrapper_, n_c, seed);
+      typedef ::pagmo::population pop_t;
+      typedef shared_ptr<pop_t> pop_ptr;
+      pop_ptr pop;
 
-      // TODO: redirect verbose to log file
-      std::string output_file = boost::get<std::string>
-          (parameters ()["pagmo.output_file"].value);
+      // If the problem is unconstrained, simply use the given problem
+      if (!is_constrained)
+	pop = pop_ptr (new pop_t (wrapper_, n_c, seed));
+      // Else, if the problem is constrained, we rely on death penalty
+      // to transform the problem into an unconstrained problem with the
+      // weighted sum of the violations added to the objective function.
+      else
+	{
+          std::vector<double> penalties (wrapper_.get_c_dimension (),
+                                         penalty_weight);
+          pop = pop_ptr (new pop_t
+			 (::pagmo::problem::death_penalty
+			  (wrapper_,
+			   ::pagmo::problem::death_penalty::WEIGHTED,
+			   penalties),
+			  n_c, seed));
+	}
+
+      std::string output_file = get<std::string>
+	(parameters ()["pagmo.output_file"].value);
       bool use_log = (output_file.compare ("") != 0);
       LogRedirector redirector;
 
       // 2 - We instantiate the algorithm with a given number of generations.
       // Note: this is where we can change the algorithm that will be used,
       // e.g Differential Evolution, Ipopt etc.
-      std::string algo_str = boost::get<std::string>
+      std::string algo_str = get<std::string>
 	(parameters ()["pagmo.algorithm"].value);
 
-#define SOLVE(ALGO,POP) \
-      if (use_log) { \
-          ALGO.set_screen_output (true); \
-          redirector.start (); \
-      } \
-      ALGO.evolve (POP); \
+#define SOLVE(ALGO,POP)					\
+      if (use_log) {					\
+	ALGO.set_screen_output (true);			\
+	redirector.start ();				\
+      }							\
+      ALGO.evolve (*POP);				\
       if (use_log) redirector.dump (output_file);
 
       // Choose appropriate algorithm
@@ -202,7 +226,7 @@ namespace roboptim
 	case cstrs_co_evolution:
 	  {
 	    // Instantiate algorithm
-        ::pagmo::algorithm::de_1220 original (generations);
+	    ::pagmo::algorithm::de_1220 original (generations);
 	    ::pagmo::algorithm::cstrs_co_evolution algo (original);
 
 	    // Evolve population with the algorithm and solve the problem
@@ -253,7 +277,7 @@ namespace roboptim
 	  break;
 	}
 
-    #undef SOLVE
+#undef SOLVE
 
       // Note: for parallel processing, evolutions can take place in parallel
       // on multiple separate islands containing, each several candidate
@@ -261,16 +285,36 @@ namespace roboptim
       //::pagmo::archipelago archi (algo, wrapper_, 8, 20);
       //archi.evolve ();
 
-      Map<const argument_t> map_x (pop.champion ().x.data (), n_);
-      Map<const result_t> map_obj (pop.champion ().f.data (), m_);
-      Map<const vector_t> map_cstr (pop.champion ().c.data (),
-                                    pop.champion ().c.size ());
+      Map<const argument_t> map_x (pop->champion ().x.data (), n_);
+      Map<const result_t> map_obj (pop->champion ().f.data (), m_);
+
+      function_t::result_t constraints;
+      constraints.resize (wrapper_.get_c_dimension ()/2);
+
+      typedef typename problem_t::constraints_t::const_iterator
+	citer_t;
+      typedef wrapper_t::linearFunction_t linearFunction_t;
+      typedef wrapper_t::nonlinearFunction_t nonlinearFunction_t;
+
+      typename function_t::size_type idx = 0;
+      for (citer_t it = problem ().constraints ().begin ();
+           it != problem ().constraints ().end (); ++it)
+	{
+          shared_ptr<DifferentiableFunction> g;
+          if (it->which () == linearFunctionId)
+	    g = get<shared_ptr<linearFunction_t> > (*it);
+          else
+	    g = get<shared_ptr<nonlinearFunction_t> > (*it);
+
+          constraints.segment (idx, g->outputSize ()) = (*g) (map_x);
+          idx += g->outputSize ();
+	}
 
       // Fill result structure
       Result result (n_, 1);
       result.x = map_x;
       result.value = map_obj;
-      result.constraints = map_cstr;
+      result.constraints = constraints;
       result_ = result;
     }
   } // namespace pagmo

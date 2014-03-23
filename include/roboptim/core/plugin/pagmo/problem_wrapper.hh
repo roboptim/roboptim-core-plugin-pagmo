@@ -49,13 +49,37 @@ namespace roboptim {
       typedef typename problem_t::interval_t interval_t;
       typedef typename problem_t::intervals_t intervals_t;
 
-      ProblemWrapper (const problem_t& pb);
+      /// \brief ProblemWrapper constructor.
+      /// \param pb problem to wrap.
+      /// \param infinity_bounds bounds used for unconstrained
+      //         problems.
+      ProblemWrapper (const problem_t& pb,
+                      double infinity_bounds = 1e5);
       virtual ~ProblemWrapper ();
 
       virtual base_ptr clone () const;
       std::string get_name () const;
 
+      /// \brief Nonlinear function type.
+      ///
+      /// The assumption is done this is the second
+      /// element of the constraints types vector.
+      typedef typename
+      boost::mpl::at<typename problem_t::constraintsList_t,
+		     boost::mpl::int_<1> >::type
+      nonlinearFunction_t;
+
+      /// \brief Linear function type.
+      ///
+      /// The assumption is done this is the first
+      /// element of the constraints types vector.
+      typedef typename
+      boost::mpl::at<typename problem_t::constraintsList_t,
+		     boost::mpl::int_<0> >::type
+      linearFunction_t;
+
     protected:
+
       virtual void objfun_impl
       (fitness_vector_t&, const decision_vector_t&) const;
 
