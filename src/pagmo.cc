@@ -34,6 +34,7 @@
 
 #include <pagmo/src/pagmo.h>
 #include <pagmo/src/archipelago.h>
+#include <pagmo/src/topologies.h>
 
 #include <pagmo/src/algorithm/bee_colony.h>
 #include <pagmo/src/algorithm/cs.h>
@@ -118,6 +119,7 @@ namespace roboptim
       DEFINE_PARAMETER ("pagmo.output_file", "output file", "");
       DEFINE_PARAMETER ("pagmo.penalty_weight",
                         "penalty weight for constrained problems", 1e5);
+      DEFINE_PARAMETER ("pagmo.threads", "number of threads", 1);
       // FIXME: use max-iterations instead?
       DEFINE_PARAMETER ("pagmo.generations", "number of generations", 3000);
     }
@@ -141,9 +143,10 @@ namespace roboptim
 	}
 
       int seed = get<int> (parameters ()["pagmo.seed"].value);
-      int n_c = get<int> (parameters ()["pagmo.candidates"].value);
+      int n_candidates = get<int> (parameters ()["pagmo.candidates"].value);
       int generations = get<int> (parameters ()["pagmo.generations"].value);
       double penalty_weight = get<double> (parameters ()["pagmo.penalty_weight"].value);
+      int n_threads = get<int> (parameters ()["pagmo.threads"].value);
 
       bool is_constrained = (wrapper_.get_c_dimension () > 0);
 
@@ -153,9 +156,13 @@ namespace roboptim
       typedef shared_ptr<pop_t> pop_ptr;
       pop_ptr pop;
 
+      typedef ::pagmo::archipelago archi_t;
+      typedef shared_ptr<archi_t> archi_ptr;
+      archi_ptr archi;
+
       // If the problem is unconstrained, simply use the given problem
       if (!is_constrained)
-	pop = pop_ptr (new pop_t (wrapper_, n_c, seed));
+	pop = pop_ptr (new pop_t (wrapper_, n_candidates, seed));
       // Else, if the problem is constrained, we rely on death penalty
       // to transform the problem into an unconstrained problem with the
       // weighted sum of the violations added to the objective function.
@@ -168,7 +175,7 @@ namespace roboptim
 			  (wrapper_,
 			   ::pagmo::problem::death_penalty::WEIGHTED,
 			   penalties),
-			  n_c, seed));
+			  n_candidates, seed));
 	}
 
       std::string output_file = get<std::string>
@@ -182,13 +189,36 @@ namespace roboptim
       std::string algo_str = get<std::string>
 	(parameters ()["pagmo.algorithm"].value);
 
-#define SOLVE(ALGO,POP)					\
-      if (use_log) {					\
-	ALGO.set_screen_output (true);			\
-	redirector.start ();				\
-      }							\
-      ALGO.evolve (*POP);				\
-      if (use_log) redirector.dump (output_file);
+#define SOLVE(ALGO,POP)							\
+      if (use_log) {							\
+	ALGO.set_screen_output (true);					\
+	redirector.start ();						\
+      }									\
+      if (n_threads > 1) {						\
+	/* TODO: handle user-defined topology */			\
+	::pagmo::topology::one_way_ring topo;				\
+	if (!is_constrained) {						\
+	  archi = archi_ptr (new archi_t (ALGO, wrapper_, n_threads,	\
+					  n_candidates, topo));		\
+	  archi->evolve ();						\
+	} else {							\
+          std::vector<double> penalties (wrapper_.get_c_dimension (),	\
+                                         penalty_weight);		\
+          ::pagmo::problem::death_penalty				\
+	      pb = ::pagmo::problem::death_penalty			\
+	      (wrapper_,						\
+	       ::pagmo::problem::death_penalty::WEIGHTED,		\
+	       penalties);						\
+	  archi = archi_ptr (new archi_t (ALGO, pb, n_threads,		\
+					  n_candidates, topo));		\
+	  archi->evolve ();						\
+	}								\
+      }									\
+      else ALGO.evolve (*POP);						\
+      if (use_log) {							\
+	redirector.dump (output_file);					\
+	redirector.stop ();						\
+      }
 
       // Choose appropriate algorithm
       switch (algo_map_[algo_str])
@@ -279,15 +309,43 @@ namespace roboptim
 
 #undef SOLVE
 
-      // Note: for parallel processing, evolutions can take place in parallel
-      // on multiple separate islands containing, each several candidate
-      // solutions to the problem.
-      //::pagmo::archipelago archi (algo, wrapper_, 8, 20);
-      //archi.evolve ();
+      Result result (n_, m_);
 
-      Map<const argument_t> map_x (pop->champion ().x.data (), n_);
-      Map<const result_t> map_obj (pop->champion ().f.data (), m_);
+      // multiple threads (archipelago)
+      if (n_threads > 1)
+	{
+	  // TODO: find best comparison strategy for multiobjective functions
+	  archi_t::size_type best_i = 0;
+          double best_min = archi->get_island (0)->get_population ().champion ().f[0];
 
+          for (archi_t::size_type i = 1; i < archi->get_size (); ++i)
+	    {
+              if (archi->get_island (i)->get_population ().champion ().f[0] < best_min)
+		{
+                  best_i = i;
+                  best_min = archi->get_island (i)->get_population ().champion ().f[0];
+		}
+	    }
+
+	  // Note: apparently, using a reference or a map here fails.
+	  const ::pagmo::population::champion_type
+	    champion = archi->get_island (best_i)->get_population ().champion ();
+
+          result.x.resize (n_);
+          result.value.resize (m_);
+          for (size_t i = 0; i < static_cast<size_t> (n_); ++i)
+	    result.x[i] = champion.x[i];
+          for (size_t i = 0; i < static_cast<size_t> (m_); ++i)
+	    result.value[i] = champion.f[i];
+	}
+      else // 1 thread
+	{
+          Map<const argument_t> map_x (pop->champion ().x.data (), n_);
+          Map<const result_t> map_obj (pop->champion ().f.data (), m_);
+
+          result.x = map_x;
+          result.value = map_obj;
+	}
       function_t::result_t constraints;
       constraints.resize (wrapper_.get_c_dimension ()/2);
 
@@ -306,14 +364,11 @@ namespace roboptim
           else
 	    g = get<shared_ptr<nonlinearFunction_t> > (*it);
 
-          constraints.segment (idx, g->outputSize ()) = (*g) (map_x);
+          constraints.segment (idx, g->outputSize ()) = (*g) (result.x);
           idx += g->outputSize ();
 	}
 
       // Fill result structure
-      Result result (n_, 1);
-      result.x = map_x;
-      result.value = map_obj;
       result.constraints = constraints;
       result_ = result;
     }
