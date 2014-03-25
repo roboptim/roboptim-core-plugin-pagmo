@@ -16,6 +16,7 @@
 // <http://www.gnu.org/licenses/>.
 
 #include <cstring>
+#include <time.h>
 
 #include <boost/shared_ptr.hpp>
 
@@ -114,8 +115,9 @@ namespace roboptim
 
       // PaGMO-specific parameters
       DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 30);
-      DEFINE_PARAMETER ("pagmo.seed", "random seed", 123);
+      DEFINE_PARAMETER ("pagmo.seed", "random seed", static_cast<int> (time (0)));
       DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "mbh");
+      DEFINE_PARAMETER ("pagmo.local_algorithm", "local algorithm", "de_1220");
       DEFINE_PARAMETER ("pagmo.output_file", "output file", "");
       DEFINE_PARAMETER ("pagmo.penalty_weight",
                         "penalty weight for constrained problems", 1e5);
@@ -140,6 +142,12 @@ namespace roboptim
 	{
           result_ = SolverError ("Undefined PaGMO algorithm.");
           return;
+	}
+
+      // Use callback (even if mostly empty)
+      if (!callback_.empty ())
+	{
+          callback_ (problem (), solverState_);
 	}
 
       int seed = get<int> (parameters ()["pagmo.seed"].value);
@@ -371,6 +379,15 @@ namespace roboptim
       // Fill result structure
       result.constraints = constraints;
       result_ = result;
+
+      // Use callback for last iteration
+      if (!callback_.empty ())
+	{
+          solverState_.x () = result.x;
+          solverState_.cost () = result.value[0];
+          callback_ (problem (), solverState_);
+	}
+
     }
   } // namespace pagmo
 } // end of namespace roboptim
