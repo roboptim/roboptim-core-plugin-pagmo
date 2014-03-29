@@ -31,15 +31,19 @@ namespace roboptim {
     // Available PaGMO algorithms
     enum Algorithm
       {
-	bee_colony, // Artificial Bee Colony
-	cmaes, // Covariance Matrix Adaptation Evolutionary Strategy
-	cs, // Compass Search Solver
+	bee_colony,         // Artificial Bee Colony
+	cmaes,              // Covariance Matrix Adaptation Evolutionary Strategy
+	cs,                 // Compass Search Solver
 	cstrs_co_evolution, // Co-Evolution constraints handling
-	de, // Differential Evolution
-	de_1220, // Differential Evolution - 1220 variant
-	ihs, // Improved Harmony Search
-	ipopt, // Ipopt
-	mbh // Monotonic Basin Hopping
+	de,                 // Differential Evolution
+	de_1220,            // Differential Evolution - 1220 variant
+	ihs,                // Improved Harmony Search
+	ipopt,              // Ipopt
+	mbh,                // Monotonic Basin Hopping
+	mde_pbx,            // MDE_pBX - Differential Evolution variant
+	ms,                 // Multi-start
+	nsga2,              // Nondominated Sorting genetic algorithm II
+	sa_corana           // Simulated Annealing with adaptive neighbourhood
       };
 
     /// \brief Solver interfacing with the PaGMO library.

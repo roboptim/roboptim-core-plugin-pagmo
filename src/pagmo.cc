@@ -45,6 +45,10 @@
 #include <pagmo/src/algorithm/de_1220.h>
 #include <pagmo/src/algorithm/ihs.h>
 #include <pagmo/src/algorithm/mbh.h>
+#include <pagmo/src/algorithm/mde_pbx.h>
+#include <pagmo/src/algorithm/ms.h>
+#include <pagmo/src/algorithm/nsga2.h>
+#include <pagmo/src/algorithm/sa_corana.h>
 
 // TODO: add Ipopt support if Ipopt has been found
 //#include <pagmo/src/algorithm/ipopt.h>
@@ -77,9 +81,9 @@ namespace roboptim
 
       // Load <algo string, algo> map
       algo_map_ = boost::assign::map_list_of
-#define N_ALGO 8
+#define N_ALGO 12
 #define ALGO_LIST (N_ALGO, (bee_colony,cmaes,cs,cstrs_co_evolution,de,de_1220, \
-                            ihs,mbh))
+                            ihs,mbh,mde_pbx,ms,nsga2,sa_corana))
 #define GET_ALGO(n) BOOST_PP_ARRAY_ELEM(n,ALGO_LIST)
 #define BOOST_PP_LOCAL_MACRO(n)				\
 	(std::string (BOOST_PP_STRINGIZE(GET_ALGO(n))), \
@@ -116,7 +120,7 @@ namespace roboptim
       // PaGMO-specific parameters
       DEFINE_PARAMETER ("pagmo.candidates", "number of candidates", 30);
       DEFINE_PARAMETER ("pagmo.seed", "random seed", static_cast<int> (time (0)));
-      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "mbh");
+      DEFINE_PARAMETER ("pagmo.algorithm", "algorithm", "mde_pbx");
       DEFINE_PARAMETER ("pagmo.local_algorithm", "local algorithm", "de_1220");
       DEFINE_PARAMETER ("pagmo.output_file", "output file", "");
       DEFINE_PARAMETER ("pagmo.penalty_weight",
@@ -158,6 +162,10 @@ namespace roboptim
 
       bool is_constrained = (wrapper_.get_c_dimension () > 0);
 
+      std::string algo_str = get<std::string>
+	(parameters ()["pagmo.algorithm"].value);
+
+
       // 1 - Create population.
       // Here, evolution will take place on the same thread as main.
       typedef ::pagmo::population pop_t;
@@ -167,6 +175,11 @@ namespace roboptim
       typedef ::pagmo::archipelago archi_t;
       typedef shared_ptr<archi_t> archi_ptr;
       archi_ptr archi;
+
+      // For NSGA-II at least 5 individuals in the population are needed
+      // and the population size must be a multiple of 4.
+      if (algo_map_[algo_str] == nsga2)
+	n_candidates -= n_candidates%4;
 
       // If the problem is unconstrained, simply use the given problem
       if (!is_constrained)
@@ -194,8 +207,6 @@ namespace roboptim
       // 2 - We instantiate the algorithm with a given number of generations.
       // Note: this is where we can change the algorithm that will be used,
       // e.g Differential Evolution, Ipopt etc.
-      std::string algo_str = get<std::string>
-	(parameters ()["pagmo.algorithm"].value);
 
 #define SOLVE(ALGO,POP)							\
       if (use_log) {							\
@@ -205,9 +216,13 @@ namespace roboptim
       if (n_threads > 1) {						\
 	/* TODO: handle user-defined topology */			\
 	::pagmo::topology::one_way_ring topo;				\
+	::pagmo::archipelago::distribution_type				\
+	    distrib = ::pagmo::archipelago::point_to_point;		\
+	::pagmo::archipelago::migration_direction			\
+	    direction = ::pagmo::archipelago::destination;		\
 	if (!is_constrained) {						\
 	  archi = archi_ptr (new archi_t (ALGO, wrapper_, n_threads,	\
-					  n_candidates, topo));		\
+					  n_candidates, topo, distrib, direction)); \
 	  archi->evolve ();						\
 	} else {							\
           std::vector<double> penalties (wrapper_.get_c_dimension (),	\
@@ -218,7 +233,7 @@ namespace roboptim
 	       ::pagmo::problem::death_penalty::WEIGHTED,		\
 	       penalties);						\
 	  archi = archi_ptr (new archi_t (ALGO, pb, n_threads,		\
-					  n_candidates, topo));		\
+					  n_candidates, topo, distrib, direction)); \
 	  archi->evolve ();						\
 	}								\
       }									\
@@ -313,6 +328,48 @@ namespace roboptim
 	    SOLVE(algo,pop);
 	  }
 	  break;
+
+	case mde_pbx:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::mde_pbx algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case ms:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::de_1220 local (generations);
+	    ::pagmo::algorithm::ms algo (local, n_candidates);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case nsga2:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::nsga2 algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
+	case sa_corana:
+	  {
+	    // Instantiate algorithm
+	    ::pagmo::algorithm::sa_corana algo (generations);
+
+	    // Evolve population with the algorithm and solve the problem
+	    SOLVE(algo,pop);
+	  }
+	  break;
+
 	}
 
 #undef SOLVE
