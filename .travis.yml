@@ -25,7 +25,10 @@ before_install:
 - ./.travis/run  before_install
 - ./.travis/dependencies/pagmo
 script:
-- export LD_LIBRARY_PATH=`pkg-config --variable=plugindir roboptim-core`:$LD_LIBRARY_PATH; ./.travis/run build
+  - . .travis/common.sh
+  - export LD_LIBRARY_PATH="$install_dir/lib/`dpkg-architecture -qDEB_BUILD_MULTIARCH`/roboptim-core:$LD_LIBRARY_PATH"
+  - export PKG_CONFIG_PATH="$install_dir/lib/`dpkg-architecture -qDEB_BUILD_MULTIARCH`/pkgconfig:$PKG_CONFIG_PATH"
+  - ./.travis/run build
 after_success: ./.travis/run after_success
 after_failure: ./.travis/run after_failure
 branches:
