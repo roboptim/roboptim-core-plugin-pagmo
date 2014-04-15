@@ -4,8 +4,9 @@ compiler:
 - clang
 env:
   global:
-  - APT_DEPENDENCIES="doxygen doxygen-latex libltdl-dev libboost-all-dev liblog4cxx10-dev"
+  - APT_DEPENDENCIES="doxygen doxygen-latex libltdl-dev libboost1.55-all-dev liblog4cxx10-dev"
   - GIT_DEPENDENCIES="roboptim/roboptim-core"
+  - MASTER_PPA="boost-latest/ppa"
   - DEBSIGN_KEYID=5AE5CD75
   - PPA_URI="roboptim/ppa"
   - NSIQCPPSTYLE_FILEFILTERPATH=cmake/filefilter.txt
@@ -21,8 +22,8 @@ notifications:
   email: roboptim@googlegroups.com
 before_install:
 - ./.travis/dependencies/eigen-3.2.0
-- ./.travis/dependencies/pagmo
 - ./.travis/run  before_install
+- ./.travis/dependencies/pagmo
 script:
 - export LD_LIBRARY_PATH=`pkg-config --variable=plugindir roboptim-core`:$LD_LIBRARY_PATH; ./.travis/run build
 after_success: ./.travis/run after_success
@@ -31,6 +32,7 @@ branches:
   only:
   - master
   - debian
+  - travis
 matrix:
   allow_failures:
   - compiler: clang
