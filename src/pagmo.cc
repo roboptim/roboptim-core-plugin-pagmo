@@ -154,7 +154,7 @@ namespace roboptim
           callback_ (problem (), solverState_);
 	}
 
-      int seed = get<int> (parameters ()["pagmo.seed"].value);
+      unsigned int seed = static_cast<unsigned int> (get<int> (parameters ()["pagmo.seed"].value));
       int n_candidates = get<int> (parameters ()["pagmo.candidates"].value);
       int generations = get<int> (parameters ()["pagmo.generations"].value);
       double penalty_weight = get<double> (parameters ()["pagmo.penalty_weight"].value);
@@ -399,9 +399,9 @@ namespace roboptim
           result.x.resize (n_);
           result.value.resize (m_);
           for (size_t i = 0; i < static_cast<size_t> (n_); ++i)
-	    result.x[i] = champion.x[i];
+	    result.x[static_cast<vector_t::Index> (i)] = champion.x[i];
           for (size_t i = 0; i < static_cast<size_t> (m_); ++i)
-	    result.value[i] = champion.f[i];
+	    result.value[static_cast<vector_t::Index> (i)] = champion.f[i];
 	}
       else // 1 thread
 	{
@@ -414,12 +414,12 @@ namespace roboptim
       function_t::result_t constraints;
       constraints.resize (wrapper_.get_c_dimension ()/2);
 
-      typedef typename problem_t::constraints_t::const_iterator
+      typedef problem_t::constraints_t::const_iterator
 	citer_t;
       typedef wrapper_t::linearFunction_t linearFunction_t;
       typedef wrapper_t::nonlinearFunction_t nonlinearFunction_t;
 
-      typename function_t::size_type idx = 0;
+      function_t::size_type idx = 0;
       for (citer_t it = problem ().constraints ().begin ();
            it != problem ().constraints ().end (); ++it)
 	{

@@ -44,7 +44,7 @@ namespace roboptim
 
 	    cstr = boost::get<boost::shared_ptr<DifferentiableFunction> > (*it);
 	    // TODO: do not support both lower and upper bounds
-	    size += 2*cstr->outputSize ();
+	    size += 2 * static_cast<size_t> (cstr->outputSize ());
 	  }
 
 	return size;
@@ -65,7 +65,7 @@ namespace roboptim
                 static_cast<int> (detail::constraint_size (pb)),
                 // total number of inequality constraints
                 static_cast<int> (detail::constraint_size (pb))),
-	pb_ (pb)
+      pb_ (pb)
     {
       std::vector<double> lb;
       std::vector<double> ub;
@@ -133,6 +133,7 @@ namespace roboptim
       // PaGMO expects constraints in the form: g <= 0
 
       typedef typename problem_t::constraints_t::const_iterator cstr_iter_t;
+      typedef typename problem_t::vector_t vector_t;
 
       size_t cstrs_id = 0;
       size_t iter = 0;
@@ -147,10 +148,12 @@ namespace roboptim
 	  typename function_t::result_t res = (*cstr)(map_x);
 
 	  // For each constraint dimension
-	  for (size_t i = 0; i < cstr->outputSize (); ++i)
+	  for (typename vector_t::Index i = 0;
+	       i < static_cast<typename vector_t::Index> (cstr->outputSize ());
+	       ++i)
             {
-	      const interval_t&
-                interval = pb_.boundsVector ()[cstrs_id][i];
+	      const interval_t& interval
+		= pb_.boundsVector ()[cstrs_id][static_cast<size_t> (i)];
 
 	      double lb = function_t::getLowerBound (interval);
 	      double ub = function_t::getUpperBound (interval);
