@@ -99,7 +99,7 @@ namespace roboptim
 
     }
 
-    SolverNlp::~SolverNlp () throw ()
+    SolverNlp::~SolverNlp ()
     {
     }
 
@@ -109,7 +109,7 @@ namespace roboptim
       parameters ()[KEY].value = VALUE;			\
     } while (0)
 
-    void SolverNlp::initializeParameters () throw ()
+    void SolverNlp::initializeParameters ()
     {
       // Clear parameters
       parameters ().clear ();
@@ -130,7 +130,7 @@ namespace roboptim
       DEFINE_PARAMETER ("pagmo.generations", "number of generations", 3000);
     }
 
-    void SolverNlp::solve () throw ()
+    void SolverNlp::solve ()
     {
       using namespace Eigen;
       using namespace boost;
