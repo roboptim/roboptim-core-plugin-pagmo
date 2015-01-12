@@ -9,7 +9,7 @@ env:
   - MASTER_PPA="boost-latest/ppa"
   - DEBSIGN_KEYID=5AE5CD75
   - PPA_URI="roboptim/ppa"
-  - NSIQCPPSTYLE_FILEFILTERPATH=cmake/filefilter.txt
+  - LCOV_IGNORE_RULES="*tests*"
   - GH_USERNAME=thomas-moulard
   - GH_REPO=roboptim/roboptim-core-plugin-pagmo
   - secure: YurfcUtraOayjgYuay0IDyY2FssU53q91VzeYXzAd1VdxH9IAatXXwQpBj8i/dSPM/1NtpB3gISpBktOy+KN7to7gKWeOQHWQOPae0SbuTPfOE5uyl1zWTtOypA3CI51el1+kmYN39Qi4ASt9LN5CD1ZZrsso7aH2bS/6YLWchA=
@@ -21,21 +21,17 @@ notifications:
       secure: LJbgx2sjAmTUu+AV8N/PSQHFQ8E1OnHAB2oYFv1XwN2hujtswNwE9k16etaEBRZ0IP1z7mTWrabaztDPC5efEaGpi4TZLMr5P9n/ABWRvJi+tVMXG7fusxTNzOaqcr31g2VQBXJ2nMZWxawP4xzTp+sSVcVsHm5xt4UjLyVQ6+A=
   email: roboptim@googlegroups.com
 before_install:
-- ./.travis/dependencies/eigen-3.2.0
-- ./.travis/run  before_install
+- ./.travis/dependencies/eigen-3.2
 - ./.travis/dependencies/pagmo
+- ./.travis/run  before_install
 script:
-  - . .travis/common.sh
-  - export LD_LIBRARY_PATH="$install_dir/lib/`dpkg-architecture -qDEB_BUILD_MULTIARCH`/roboptim-core:$LD_LIBRARY_PATH"
-  - export PKG_CONFIG_PATH="$install_dir/lib/`dpkg-architecture -qDEB_BUILD_MULTIARCH`/pkgconfig:$PKG_CONFIG_PATH"
-  - ./.travis/run build
+- export LD_LIBRARY_PATH=`pkg-config --variable=plugindir roboptim-core`:$LD_LIBRARY_PATH; ./.travis/run build
 after_success: ./.travis/run after_success
 after_failure: ./.travis/run after_failure
 branches:
   only:
   - master
   - debian
-  - travis
 matrix:
   allow_failures:
   - compiler: clang
