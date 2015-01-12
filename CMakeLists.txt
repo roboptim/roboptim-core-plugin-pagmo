@@ -22,6 +22,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 INCLUDE(cmake/base.cmake)
 INCLUDE(cmake/boost.cmake)
 INCLUDE(cmake/eigen.cmake)
+INCLUDE(cmake/cpack.cmake)
 
 SET(PROJECT_NAME roboptim-core-plugin-pagmo)
 SET(PROJECT_DESCRIPTION "Nonlinear optimization using PaGMO.")
@@ -48,9 +49,18 @@ ADD_REQUIRED_DEPENDENCY("pagmo")
 
 MESSAGE(STATUS "ROBOPTIM_CORE_PLUGINDIR: " ${ROBOPTIM_CORE_PLUGINDIR})
 
+OPTION(DISABLE_TESTS "Disable test programs" OFF)
+
 ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(tests)
+
+IF(NOT DISABLE_TESTS)
+  ADD_SUBDIRECTORY(tests)
+ELSE()
+  MESSAGE(WARNING
+    "Tests should only be disabled for speficic cases. Do it at your own risk.")
+ENDIF()
 
 HEADER_INSTALL("${HEADERS}")
 
 SETUP_PROJECT_FINALIZE()
+SETUP_PROJECT_CPACK()
