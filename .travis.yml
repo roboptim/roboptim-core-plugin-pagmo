@@ -22,8 +22,8 @@ notifications:
   email: roboptim@googlegroups.com
 before_install:
 - ./.travis/dependencies/eigen-3.2
-- ./.travis/dependencies/pagmo
 - ./.travis/run  before_install
+- ./.travis/dependencies/pagmo
 script:
 - export LD_LIBRARY_PATH=`pkg-config --variable=plugindir roboptim-core`:$LD_LIBRARY_PATH; ./.travis/run build
 after_success: ./.travis/run after_success
