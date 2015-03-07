@@ -5,7 +5,7 @@ compiler:
 env:
   global:
   - APT_DEPENDENCIES="doxygen doxygen-latex libltdl-dev libboost1.55-all-dev liblog4cxx10-dev"
-  - GIT_DEPENDENCIES="roboptim/roboptim-core"
+  - GIT_DEPENDENCIES="roboptim/roboptim-core:3.0"
   - MASTER_PPA="boost-latest/ppa"
   - DEBSIGN_KEYID=5AE5CD75
   - PPA_URI="roboptim/ppa"
@@ -32,6 +32,7 @@ after_failure: ./.travis/run after_failure
 branches:
   only:
   - master
+  - "3.0"
   - debian
 matrix:
   allow_failures:
